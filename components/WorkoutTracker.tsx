@@ -1,65 +1,138 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPoseLandmarker, drawPose } from '../services/poseDetectionService';
+import { PoseLandmarker } from '@mediapipe/tasks-vision';
+import { processPose, getInitialExerciseState, ExerciseState } from '../utils/exerciseLogic';
 
 interface WorkoutTrackerProps {
   workoutTitle: string;
   onEndWorkout: () => void;
 }
 
+const CALORIES_PER_REP: { [key: string]: number } = {
+    'Squat Race': 0.32,
+    'Jump Wars': 0.2,
+    'Plank Duel': 0, // Calories for plank are based on time
+};
+const CALORIES_PER_SECOND_PLANK = 0.08;
+
 const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({ workoutTitle, onEndWorkout }) => {
   const [reps, setReps] = useState(0);
   const [calories, setCalories] = useState(0);
-  const [formFeedback, setFormFeedback] = useState("Keep your back straight!");
+  const [formFeedback, setFormFeedback] = useState("Initializing...");
   const [timer, setTimer] = useState(0);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // FIX: Initialize useRef with an explicit undefined value to satisfy strict checkers expecting one argument.
+  const requestRef = useRef<number | undefined>(undefined);
+  const poseLandmarkerRef = useRef<PoseLandmarker | null>(null);
+  const exerciseStateRef = useRef<ExerciseState>(getInitialExerciseState(workoutTitle));
+
+  const predictWebcam = useCallback(async () => {
+    if (!videoRef.current || !canvasRef.current || !poseLandmarkerRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const poseLandmarker = poseLandmarkerRef.current;
+
+    if (video.readyState < 2) {
+      requestRef.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const canvasCtx = canvas.getContext('2d');
+    if (!canvasCtx) return;
+    
+    const startTimeMs = performance.now();
+    const results = poseLandmarker.detectForVideo(video, startTimeMs);
+
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (results.landmarks && results.landmarks.length > 0) {
+      const landmarks = results.landmarks[0];
+      drawPose(canvasCtx, landmarks);
+
+      const newState = processPose(workoutTitle, landmarks, exerciseStateRef.current);
+      if (newState.reps !== exerciseStateRef.current.reps) {
+        setReps(newState.reps);
+      }
+      if(newState.feedback !== exerciseStateRef.current.feedback) {
+          setFormFeedback(newState.feedback);
+      }
+      exerciseStateRef.current = newState;
+    }
+    
+    canvasCtx.restore();
+    requestRef.current = requestAnimationFrame(predictWebcam);
+  }, [workoutTitle]);
 
   useEffect(() => {
-    // Mock data updates
-    const repInterval = setInterval(() => setReps(prev => prev + 1), 3000);
-    const calorieInterval = setInterval(() => setCalories(prev => prev + 2), 1000);
     const timerInterval = setInterval(() => setTimer(prev => prev + 1), 1000);
-    
-    // Access webcam
-    const enableWebcam = async () => {
+
+    const setup = async () => {
+      try {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                    setCameraError(null);
-                }
-            } catch (err: any) {
-                console.error("Error accessing webcam: ", err);
-                if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-                    setCameraError("No webcam found. Please connect a camera and try again.");
-                    setFormFeedback("No webcam found. Cannot track form.");
-                } else if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-                    setCameraError("Webcam access denied. Please allow camera access in your browser settings.");
-                    setFormFeedback("Webcam access denied. Cannot track form.");
-                } else {
-                    setCameraError("Could not access webcam. Please check your connection and browser permissions.");
-                    setFormFeedback("An error occurred with the webcam.");
-                }
-            }
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+              createPoseLandmarker()
+                .then(landmarker => {
+                  poseLandmarkerRef.current = landmarker;
+                  setFormFeedback(getInitialExerciseState(workoutTitle).feedback);
+                  setIsLoading(false);
+                  requestRef.current = requestAnimationFrame(predictWebcam);
+                })
+                .catch(err => {
+                  console.error("Error creating pose landmarker:", err);
+                  setCameraError("Failed to load AI model. Please refresh and try again.");
+                  setIsLoading(false);
+                });
+            };
+          }
         } else {
             setCameraError("Your browser does not support webcam access.");
-            setFormFeedback("Webcam not supported.");
+            setIsLoading(false);
         }
+      } catch (err: any) {
+        console.error("Error accessing webcam: ", err);
+        if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+          setCameraError("No webcam found.");
+        } else if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          setCameraError("Webcam access denied. Please allow camera access in your browser settings.");
+        } else {
+          setCameraError("Could not access webcam.");
+        }
+        setIsLoading(false);
+      }
     };
 
-    enableWebcam();
+    setup();
 
     return () => {
-      clearInterval(repInterval);
-      clearInterval(calorieInterval);
       clearInterval(timerInterval);
-      // Clean up webcam stream
+      // FIX: Improved check for requestRef.current to prevent issues if the animation frame ID is 0.
+      if (typeof requestRef.current === 'number') {
+        cancelAnimationFrame(requestRef.current);
+      }
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [predictWebcam, workoutTitle]);
+
+  useEffect(() => {
+      const repCalories = (CALORIES_PER_REP[workoutTitle] || 0) * reps;
+      const timeCalories = workoutTitle === 'Plank Duel' ? timer * CALORIES_PER_SECOND_PLANK : 0;
+      setCalories(Math.round(repCalories + timeCalories));
+  }, [reps, timer, workoutTitle]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -81,21 +154,14 @@ const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({ workoutTitle, onEndWork
           </div>
         ) : (
           <>
-            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover transform scale-x-[-1]"></video>
-            {/* Skeletal Overlay Placeholder */}
-            <svg className="absolute top-0 left-0 w-full h-full" viewBox="0 0 480 360">
-                {/* Mock skeleton */}
-                <circle cx="240" cy="80" r="15" fill="none" stroke="#4ade80" strokeWidth="2" />
-                <line x1="240" y1="95" x2="240" y2="180" stroke="#4ade80" strokeWidth="2" />
-                <line x1="240" y1="120" x2="190" y2="160" stroke="#4ade80" strokeWidth="2" />
-                <line x1="240" y1="120" x2="290" y2="160" stroke="#4ade80" strokeWidth="2" />
-                <line x1="190" y1="160" x2="170" y2="220" stroke="#4ade80" strokeWidth="2" />
-                <line x1="290" y1="160" x2="310" y2="220" stroke="#4ade80" strokeWidth="2" />
-                <line x1="240" y1="180" x2="210" y2="260" stroke="#4ade80" strokeWidth="2" />
-                <line x1="240" y1="180" x2="270" y2="260" stroke="#4ade80" strokeWidth="2" />
-                <line x1="210" y1="260" x2="200" y2="330" stroke="#4ade80" strokeWidth="2" />
-                <line x1="270" y1="260" x2="280" y2="330" stroke="#4ade80" strokeWidth="2" />
-            </svg>
+            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover transform scale-x-[-1] absolute"></video>
+            <canvas ref={canvasRef} className="w-full h-full absolute transform scale-x-[-1]"></canvas>
+            {isLoading && (
+              <div className="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center bg-zinc-900/80 text-white z-10">
+                <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-primary"></div>
+                <p className="mt-4 text-lg">Loading AI Coach...</p>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -114,7 +180,7 @@ const WorkoutTracker: React.FC<WorkoutTrackerProps> = ({ workoutTitle, onEndWork
               <p className="text-4xl font-bold">{calories}</p>
             </div>
           </div>
-          <div className="bg-accent/20 border-l-4 border-accent text-accent-dark dark:text-accent p-4 rounded-r-lg mb-6">
+          <div className="bg-accent/20 border-l-4 border-accent text-accent-dark dark:text-accent p-4 rounded-r-lg mb-6 min-h-[80px]">
             <h4 className="font-bold">Form Feedback</h4>
             <p>{formFeedback}</p>
           </div>
