@@ -9,15 +9,51 @@ export const mockUser: User = {
   points: 12500,
 };
 
-export const mockWorkouts: Workout[] = [
-  { date: '2024-07-20', exercise: 'Squats', reps: 50, durationMinutes: 15, caloriesBurned: 150 },
-  { date: '2024-07-21', exercise: 'Push-ups', reps: 30, durationMinutes: 10, caloriesBurned: 100 },
-  { date: '2024-07-22', exercise: 'Jumping Jacks', durationMinutes: 20, caloriesBurned: 250 },
-  { date: '2024-07-23', exercise: 'Plank', durationMinutes: 5, caloriesBurned: 50 },
-  { date: '2024-07-24', exercise: 'Squats', reps: 60, durationMinutes: 18, caloriesBurned: 180 },
-  { date: '2024-07-25', exercise: 'Push-ups', reps: 35, durationMinutes: 12, caloriesBurned: 120 },
-  { date: '2024-07-26', exercise: 'Jumping Jacks', durationMinutes: 25, caloriesBurned: 300 },
-];
+const generateMockWorkouts = (): Workout[] => {
+    const workouts: Workout[] = [];
+    const today = new Date();
+    const exercises: Array<'Push-ups' | 'Squats' | 'Jumping Jacks' | 'Plank'> = ['Squats', 'Push-ups', 'Jumping Jacks', 'Plank'];
+
+    for (let i = 30; i >= 0; i--) {
+        const day = new Date(today);
+        day.setDate(today.getDate() - i);
+        
+        const numWorkouts = Math.floor(Math.random() * 3) + 1;
+        for (let j = 0; j < numWorkouts; j++) {
+            const workoutDate = new Date(day);
+            // Give it a random time of day
+            workoutDate.setHours(Math.floor(Math.random() * 24));
+            workoutDate.setMinutes(Math.floor(Math.random() * 60));
+
+            const exercise = exercises[Math.floor(Math.random() * exercises.length)];
+            let workout: Workout;
+            if (exercise === 'Plank') {
+                const duration = Math.floor(Math.random() * 4) + 1; // 1-5 mins
+                workout = {
+                    date: workoutDate.toISOString(),
+                    exercise,
+                    durationMinutes: duration,
+                    caloriesBurned: duration * 10,
+                };
+            } else {
+                const reps = Math.floor(Math.random() * 41) + 10; // 10-50 reps
+                const duration = Math.floor(reps / 3) + 2;
+                workout = {
+                    date: workoutDate.toISOString(),
+                    exercise,
+                    reps,
+                    durationMinutes: duration,
+                    caloriesBurned: Math.floor(reps * 2.5),
+                };
+            }
+            workouts.push(workout);
+        }
+    }
+    return workouts;
+};
+
+export const mockWorkouts: Workout[] = generateMockWorkouts();
+
 
 export const mockFriendsLeaderboard: LeaderboardEntry[] = [
   { rank: 1, name: 'Sarah Chen', avatarUrl: 'https://picsum.photos/seed/sarah/40/40', points: 15200, isUser: false },

@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Chat } from "@google/genai";
 import { Workout } from '../types';
 
@@ -20,10 +19,11 @@ export const createFitnessChatSession = (userHistory: Workout[]): Chat => {
         .map(w => `${w.exercise}: ${w.reps ? `${w.reps} reps` : `${w.durationMinutes} mins`}`)
         .join(', ');
         
-    const systemInstruction = `You are Nexus, an elite AI fitness coach. You are motivating, knowledgeable, and prioritize safety.
-    Your responses should be concise, actionable, and formatted with markdown.
-    Based on the user's recent activity, provide personalized recommendations.
-    User's recent workouts: ${historySummary}.`;
+    const systemInstruction = `You are Nexus, an elite AI fitness coach. You are motivating, knowledgeable, and you prioritize safety.
+Your goal is to help the user on their fitness journey. Keep your responses concise and actionable.
+Use simple markdown for formatting, like **bolding** key terms or creating lists with a single \`*\`. Avoid using headers or complex markdown syntax.
+The user's recent workouts are: ${historySummary}.
+Analyze their recent activity and provide a personalized, encouraging opening message with a suggestion or a question to start the conversation.`;
 
     const aiInstance = getAI();
     return aiInstance.chats.create({

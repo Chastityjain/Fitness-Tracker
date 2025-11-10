@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createFitnessChatSession, sendMessageToCoach } from '../services/geminiService';
 import { Workout } from '../types';
@@ -17,6 +16,40 @@ interface Message {
     text: string;
 }
 
+const renderMarkdown = (text: string): string => {
+    const processedText = text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    const lines = processedText.split('\n');
+    let html = '';
+    let inList = false;
+
+    for (const line of lines) {
+        if (line.startsWith('* ')) {
+            if (!inList) {
+                html += '<ul>';
+                inList = true;
+            }
+            html += `<li>${line.substring(2)}</li>`;
+        } else {
+            if (inList) {
+                html += '</ul>';
+                inList = false;
+            }
+            if (line.trim()) {
+                 html += `<p>${line}</p>`;
+            }
+        }
+    }
+
+    if (inList) {
+        html += '</ul>';
+    }
+
+    return html.replace(/<\/p><p>/g, '</p><p>');
+};
+
+
 const AIAssistant: React.FC<AIAssistantProps> = ({ userHistory }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -31,23 +64,27 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ userHistory }) => {
 
     useEffect(scrollToBottom, [messages]);
 
-    const initializeChat = useCallback(() => {
-        if (!chatRef.current) {
+    const initializeChat = useCallback(async () => {
+        if (!chatRef.current && messages.length === 0) {
+            setIsLoading(true);
             try {
                 chatRef.current = createFitnessChatSession(userHistory);
-                setMessages([{ sender: 'ai', text: "Hello! I'm Nexus, your AI Fitness Coach. How can I help you reach your goals today?" }]);
+                const initialResponse = await sendMessageToCoach(chatRef.current, "Hello, please give me a greeting and a personalized suggestion based on my recent workouts.");
+                setMessages([{ sender: 'ai', text: initialResponse }]);
             } catch (error) {
                  setMessages([{ sender: 'ai', text: "Could not initialize AI Coach. Please ensure your API Key is configured." }]);
                  console.error(error);
+            } finally {
+                setIsLoading(false);
             }
         }
-    }, [userHistory]);
+    }, [userHistory, messages.length]);
     
     const handleToggle = () => {
         const willOpen = !isOpen;
         setIsOpen(willOpen);
-        if(willOpen && messages.length === 0){
-             initializeChat();
+        if (willOpen) {
+            initializeChat();
         }
     }
 
@@ -90,7 +127,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ userHistory }) => {
                             {messages.map((msg, index) => (
                                 <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`max-w-[80%] p-3 rounded-2xl ${msg.sender === 'user' ? 'bg-primary text-white rounded-br-none' : 'bg-zinc-200 dark:bg-zinc-700 rounded-bl-none'}`}>
-                                        <p className="text-sm" dangerouslySetInnerHTML={{ __html: msg.text.replace(/\n/g, '<br />') }}></p>
+                                        <div className="text-sm prose dark:prose-invert" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}></div>
                                     </div>
                                 </div>
                             ))}
