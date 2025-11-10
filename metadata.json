@@ -1,0 +1,7 @@
+{
+  "name": "AI Fitness Nexus",
+  "description": "A next-generation AI fitness platform that tracks workouts using your camera, turns fitness into interactive games, and lets users compete on periodic leaderboards.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
