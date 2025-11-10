@@ -20,9 +20,11 @@ const Header: React.FC<HeaderProps> = ({ user, theme, toggleTheme }) => {
   return (
     <header className="bg-white/70 dark:bg-darkbg/70 backdrop-blur-md sticky top-0 z-50 shadow-md dark:shadow-zinc-800">
       <div className="container mx-auto px-4 md:px-8 py-3 flex justify-between items-center">
-        <div className="flex items-center space-x-2">
-          <svg className="w-8 h-8 text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12.378 1.602a.75.75 0 0 0-.756 0L3 6.632l9 5.25 9-5.25-8.622-5.03ZM21.75 7.93l-9 5.25v9l8.628-5.032a.75.75 0 0 0 .372-.648V7.93ZM11.25 22.18v-9l-9-5.25v8.55a.75.75 0 0 0 .372.648l8.628 5.033Z" /></svg>
-          <h1 className="text-xl md:text-2xl font-bold text-zinc-900 dark:text-zinc-100">AI Fitness Nexus</h1>
+        <div className="flex items-center space-x-3">
+          <svg className="w-8 h-8 text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M2 11h2l1.5-3 1.5 3 2-8 2.5 14 2-9h4v-2h2v8h-2v-2h-4l-2 9-2.5-14-2 8-1.5-3-1.5 3h-2v-2zm18.5 1.5v-1c0-.28.22-.5.5-.5h1c.28 0 .5.22.5.5v5c0 .28-.22.5-.5.5h-1c-.28 0-.5-.22-.5-.5v-4z" />
+          </svg>
+          <h1 className="text-xl md:text-2xl font-bold text-zinc-900 dark:text-zinc-100">Swasth</h1>
         </div>
         <div className="flex items-center space-x-4">
           <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
